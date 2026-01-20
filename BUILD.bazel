@@ -1,0 +1,119 @@
+# gxtest - Headless Genesis Plus GX test harness
+
+package(default_visibility = ["//visibility:public"])
+
+# Genesis Plus GX core library
+cc_library(
+    name = "genplusgx_core",
+    srcs = glob([
+        "vendor/genplusgx/*.c",
+        "vendor/genplusgx/m68k/*.c",
+        "vendor/genplusgx/z80/*.c",
+        "vendor/genplusgx/sound/*.c",
+        "vendor/genplusgx/input_hw/*.c",
+        "vendor/genplusgx/cart_hw/*.c",
+        "vendor/genplusgx/cart_hw/svp/*.c",
+        "vendor/genplusgx/ntsc/*.c",
+    ], exclude = [
+        # Exclude files that require external dependencies
+        "vendor/genplusgx/cart_hw/megasd.c",
+        "vendor/genplusgx/cart_hw/yx5200.c",
+    ]),
+    hdrs = glob([
+        "vendor/genplusgx/*.h",
+        "vendor/genplusgx/m68k/*.h",
+        "vendor/genplusgx/z80/*.h",
+        "vendor/genplusgx/sound/*.h",
+        "vendor/genplusgx/input_hw/*.h",
+        "vendor/genplusgx/cart_hw/*.h",
+        "vendor/genplusgx/cart_hw/svp/*.h",
+        "vendor/genplusgx/ntsc/*.h",
+        "vendor/genplusgx/cd_hw/*.h",
+    ]) + ["src/osd.h"],
+    copts = [
+        "-Wno-unused-parameter",
+        "-Wno-sign-compare",
+        "-Wno-implicit-function-declaration",
+        "-Wno-missing-field-initializers",
+        "-Wno-unused-variable",
+        "-Wno-pointer-sign",
+    ],
+    defines = [
+        "USE_16BPP_RENDERING",
+        "HAVE_NO_SPRITE_LIMIT",
+        "MAXROMSIZE=33554432",
+        "HAVE_YM3438_CORE",
+        "HAVE_OPLL_CORE",
+        "LSB_FIRST",  # Most modern systems (x86, ARM) are little-endian
+    ],
+    includes = [
+        "src",
+        "vendor/genplusgx",
+        "vendor/genplusgx/m68k",
+        "vendor/genplusgx/z80",
+        "vendor/genplusgx/sound",
+        "vendor/genplusgx/input_hw",
+        "vendor/genplusgx/cart_hw",
+        "vendor/genplusgx/cart_hw/svp",
+        "vendor/genplusgx/ntsc",
+        "vendor/genplusgx/cd_hw",
+    ],
+    # Link math library on Linux (handled automatically on other platforms)
+    linkopts = ["-lm"],
+)
+
+# gxtest C++ wrapper library
+cc_library(
+    name = "gxtest",
+    srcs = [
+        "src/gxtest.cpp",
+        "src/stubs.c",
+    ],
+    hdrs = [
+        "include/gxtest.h",
+        "src/osd.h",
+    ],
+    defines = [
+        "LSB_FIRST",  # Most modern systems (x86, ARM) are little-endian
+    ],
+    includes = [
+        "include",
+        "src",
+        "vendor/genplusgx",
+        "vendor/genplusgx/m68k",
+        "vendor/genplusgx/z80",
+        "vendor/genplusgx/sound",
+        "vendor/genplusgx/input_hw",
+        "vendor/genplusgx/cart_hw",
+        "vendor/genplusgx/cart_hw/svp",
+        "vendor/genplusgx/ntsc",
+        "vendor/genplusgx/cd_hw",
+    ],
+    deps = [
+        ":genplusgx_core",
+        "@googletest//:gtest",
+    ],
+)
+
+# Example test
+cc_test(
+    name = "gxtest_example",
+    srcs = ["tests/example_test.cpp"],
+    deps = [
+        ":gxtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
+# Prime sieve test
+cc_test(
+    name = "gxtest_prime_sieve",
+    srcs = [
+        "tests/prime_sieve_test.cpp",
+        "tests/prime_sieve_rom.h",
+    ],
+    deps = [
+        ":gxtest",
+        "@googletest//:gtest_main",
+    ],
+)

@@ -1,0 +1,23 @@
+build/
+.DS_Store
+.vscode/
+.idea/
+*.o
+*.a
+*.dylib
+*.so
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Bazel
+bazel-*
+.bazelrc.user
+MODULE.bazel.lock
+
+# Generated ROM files
+roms/*/*.bin
+roms/*/*.elf
+roms/*/*.o

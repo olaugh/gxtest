@@ -1,0 +1,17 @@
+# Bazel configuration for gxtest
+
+# Use C++17
+build --cxxopt=-std=c++17
+
+# Optimization for release builds
+build:release --compilation_mode=opt
+
+# Debug builds
+build:debug --compilation_mode=dbg
+
+# Common compiler warnings
+build --cxxopt=-Wall
+build --cxxopt=-Wextra
+
+# Suppress warnings in vendored code
+build --per_file_copt=vendor/.*@-w
