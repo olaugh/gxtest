@@ -67,8 +67,11 @@ cc_library(
         "vendor/genplusgx/cd_hw",
         "vendor/genplusgx/debug",
     ],
-    # Link math library on Linux (handled automatically on other platforms)
-    linkopts = ["-lm"],
+    # Link math library on Linux (not needed on macOS where it's in libSystem)
+    linkopts = select({
+        "@platforms//os:linux": ["-lm"],
+        "//conditions:default": [],
+    }),
 )
 
 # gxtest C++ wrapper library
