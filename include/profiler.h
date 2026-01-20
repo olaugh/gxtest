@@ -177,6 +177,11 @@ public:
     uint64_t GetTotalCycles() const { return total_cycles_; }
 
     /**
+     * Get current sample rate (1 = every instruction)
+     */
+    uint32_t GetSampleRate() const { return sample_rate_; }
+
+    /**
      * Print a formatted profile report
      * @param out Output stream
      * @param max_functions Maximum functions to show (0 = all)

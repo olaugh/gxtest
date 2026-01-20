@@ -300,6 +300,9 @@ void Profiler::PrintReport(std::ostream& out, size_t max_functions) const {
     // Print header
     bool show_inclusive = (mode_ == ProfileMode::CallStack);
     out << "\n";
+    if (sample_rate_ > 1) {
+        out << "Sample rate: 1/" << sample_rate_ << " (estimated cycles)\n";
+    }
     out << std::setw(30) << std::left << "Function"
         << std::setw(12) << std::right << "Cycles";
     if (show_inclusive) {
