@@ -217,8 +217,7 @@ void Profiler::OnExecute(uint32_t pc) {
     if (sample_rate_ > 1) {
         sample_counter_++;
         if (sample_counter_ < sample_rate_) {
-            last_pc_ = pc;
-            return;
+            return;  // Don't update last_pc_ - preserve it for call detection
         }
         sample_counter_ = 0;
         // Scale up the delta to account for skipped samples
