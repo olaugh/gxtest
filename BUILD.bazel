@@ -21,6 +21,8 @@ cc_library(
     ]) + [
         # Stubs for Sega CD, MegaSD, YX5200 (not needed for cartridge games)
         "src/stubs.c",
+        # CPU hook support for profiling
+        "vendor/genplusgx/debug/cpuhook.c",
     ],
     hdrs = glob([
         "vendor/genplusgx/*.h",
@@ -32,8 +34,10 @@ cc_library(
         "vendor/genplusgx/cart_hw/svp/*.h",
         "vendor/genplusgx/ntsc/*.h",
         "vendor/genplusgx/cd_hw/*.h",
+        "vendor/genplusgx/debug/*.h",
     ]) + ["src/osd.h"],
     copts = [
+        "-O3",  # Always optimize emulator for fast test execution
         "-Wno-unused-parameter",
         "-Wno-sign-compare",
         "-Wno-implicit-function-declaration",
@@ -48,6 +52,7 @@ cc_library(
         "HAVE_YM3438_CORE",
         "HAVE_OPLL_CORE",
         "LSB_FIRST",  # Most modern systems (x86, ARM) are little-endian
+        "HOOK_CPU",   # Enable CPU hooks for profiling
     ],
     includes = [
         "src",
@@ -60,6 +65,7 @@ cc_library(
         "vendor/genplusgx/cart_hw/svp",
         "vendor/genplusgx/ntsc",
         "vendor/genplusgx/cd_hw",
+        "vendor/genplusgx/debug",
     ],
     # Link math library on Linux (handled automatically on other platforms)
     linkopts = ["-lm"],
@@ -70,13 +76,16 @@ cc_library(
     name = "gxtest",
     srcs = [
         "src/gxtest.cpp",
+        "src/profiler.cpp",
     ],
     hdrs = [
         "include/gxtest.h",
+        "include/profiler.h",
         "src/osd.h",
     ],
     defines = [
         "LSB_FIRST",  # Most modern systems (x86, ARM) are little-endian
+        "HOOK_CPU",   # Enable CPU hooks for profiling
     ],
     includes = [
         "include",
@@ -90,6 +99,7 @@ cc_library(
         "vendor/genplusgx/cart_hw/svp",
         "vendor/genplusgx/ntsc",
         "vendor/genplusgx/cd_hw",
+        "vendor/genplusgx/debug",
     ],
     deps = [
         ":genplusgx_core",
