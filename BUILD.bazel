@@ -18,7 +18,10 @@ cc_library(
         # Exclude files that require external dependencies
         "vendor/genplusgx/cart_hw/megasd.c",
         "vendor/genplusgx/cart_hw/yx5200.c",
-    ]),
+    ]) + [
+        # Stubs for Sega CD, MegaSD, YX5200 (not needed for cartridge games)
+        "src/stubs.c",
+    ],
     hdrs = glob([
         "vendor/genplusgx/*.h",
         "vendor/genplusgx/m68k/*.h",
@@ -67,7 +70,6 @@ cc_library(
     name = "gxtest",
     srcs = [
         "src/gxtest.cpp",
-        "src/stubs.c",
     ],
     hdrs = [
         "include/gxtest.h",

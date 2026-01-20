@@ -94,6 +94,9 @@ set(GENPLUSGX_SOURCES
     # SVP (Virtua Racing chip)
     vendor/genplusgx/cart_hw/svp/svp.c
     vendor/genplusgx/cart_hw/svp/ssp16.c
+
+    # Stubs for Sega CD, MegaSD, YX5200 (not needed for cartridge games)
+    src/stubs.c
 )
 
 # Create the core library
@@ -167,7 +170,6 @@ enable_testing()
 
 add_library(gxtest STATIC
     src/gxtest.cpp
-    src/stubs.c
 )
 
 target_include_directories(gxtest PUBLIC

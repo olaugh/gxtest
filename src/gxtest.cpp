@@ -19,7 +19,7 @@ extern "C" {
 
 // Global variables required by the core (must have C linkage)
 t_config config;
-t_bitmap bitmap;
+extern t_bitmap bitmap;  // Defined in core's system.c
 
 // BIOS path strings required by the core
 char GG_ROM[256] = "";

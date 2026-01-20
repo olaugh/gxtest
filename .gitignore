@@ -17,6 +17,9 @@ bazel-*
 .bazelrc.user
 MODULE.bazel.lock
 
+# Editor/IDE caches
+.cache/
+
 # Generated ROM files
 roms/*/*.bin
 roms/*/*.elf
