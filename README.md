@@ -13,6 +13,37 @@ A headless Genesis/Mega Drive test harness built on [Genesis Plus GX](https://gi
 - **State Save/Load**: Capture and restore emulator state
 - **Conditional Execution**: Run until memory conditions are met
 
+## Thread Safety
+
+**Important:** Genesis Plus GX uses global variables for emulator state, making it **not thread-safe**. Only one `GX::Emulator` instance may exist at a time per process.
+
+```cpp
+// This will throw std::runtime_error:
+GX::Emulator emu1;
+GX::Emulator emu2;  // ERROR: Only one instance allowed
+```
+
+### Parallel Test Execution
+
+For parallel testing, use **process-based parallelism** instead of threads:
+
+```bash
+# CTest runs test executables in parallel (separate processes)
+ctest -j 8
+
+# Or use GoogleTest's parallel runner
+./my_test --gtest_parallel
+```
+
+Each process gets its own copy of the global emulator state, avoiding conflicts.
+
+**Do NOT use:**
+- `std::thread` with multiple Emulator instances
+- `std::async` with multiple Emulator instances
+- Thread pools running different ROMs
+
+See [Issue #2](https://github.com/olaugh/gxtest/issues/2) for details.
+
 ## Quick Start
 
 ### Building

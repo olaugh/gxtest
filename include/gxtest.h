@@ -4,6 +4,22 @@
  * This library wraps the Genesis Plus GX emulator core, providing a clean C++
  * interface for headless execution and memory instrumentation.
  *
+ * IMPORTANT: Thread Safety Limitation
+ * ------------------------------------
+ * Genesis Plus GX uses global variables for system state (memory, registers,
+ * configuration). This means:
+ *
+ *   - Only ONE GX::Emulator instance may exist at a time per process
+ *   - Creating a second instance will throw std::runtime_error
+ *   - Do NOT use std::thread or std::async for parallel emulator instances
+ *
+ * For parallel test execution, use process-based parallelism:
+ *   - GoogleTest: --gtest_parallel (runs tests in separate processes)
+ *   - CTest: ctest -j N (runs test executables in parallel)
+ *   - Manual: fork() to create separate processes
+ *
+ * See: https://github.com/olaugh/gxtest/issues/2
+ *
  * Example usage:
  *
  *   #include <gxtest.h>
@@ -59,9 +75,19 @@ struct Input {
 
 /**
  * Emulator wrapper class providing the test harness interface
+ *
+ * WARNING: Only one Emulator instance may exist per process due to
+ * Genesis Plus GX's use of global state. Attempting to create a
+ * second instance will throw std::runtime_error.
+ *
+ * @throws std::runtime_error if another Emulator instance already exists
  */
 class Emulator {
 public:
+    /**
+     * Construct an Emulator instance
+     * @throws std::runtime_error if another instance already exists
+     */
     Emulator();
     ~Emulator();
 

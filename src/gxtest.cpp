@@ -5,6 +5,7 @@
 #include "gxtest.h"
 #include "osd.h"
 
+#include <atomic>
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
@@ -37,6 +38,12 @@ char MS_BIOS_JP[256] = "";
 }
 
 namespace GX {
+
+// ---------------------------------------------------------------------------
+// Thread Safety: Genesis Plus GX uses global state and is NOT thread-safe.
+// Only one Emulator instance may exist at a time within a process.
+// ---------------------------------------------------------------------------
+static std::atomic<int> g_instance_count{0};
 
 // Frame buffer for headless rendering (required even if not displayed)
 static uint16_t frame_buffer[720 * 576];
@@ -244,10 +251,26 @@ public:
 // Emulator - Public interface implementation
 // ---------------------------------------------------------------------------
 
-Emulator::Emulator() : pImpl(new Impl()) {}
+Emulator::Emulator() : pImpl(new Impl()) {
+    int count = ++g_instance_count;
+    if (count > 1) {
+        --g_instance_count;
+        delete pImpl;
+        pImpl = nullptr;
+        throw std::runtime_error(
+            "GX::Emulator: Only one instance allowed per process. "
+            "Genesis Plus GX uses global state and is not thread-safe. "
+            "For parallel testing, use process-based parallelism (fork) "
+            "or run tests sequentially. See GitHub issue #2."
+        );
+    }
+}
 
 Emulator::~Emulator() {
-    delete pImpl;
+    if (pImpl) {
+        delete pImpl;
+        --g_instance_count;
+    }
 }
 
 bool Emulator::LoadRom(const std::string& path) {

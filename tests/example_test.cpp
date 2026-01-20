@@ -6,6 +6,7 @@
  */
 
 #include <gxtest.h>
+#include <stdexcept>
 
 namespace {
 
@@ -23,6 +24,23 @@ TEST(GXTestBasic, LoadNonexistentRomFails) {
     GX::Emulator emu;
     EXPECT_FALSE(emu.LoadRom("/nonexistent/path/to/rom.bin"));
     EXPECT_FALSE(emu.IsRomLoaded());
+}
+
+/**
+ * Test that creating multiple Emulator instances throws an exception.
+ * This verifies the thread-safety guard documented in issue #2.
+ */
+TEST(GXTestBasic, MultipleInstancesThrows) {
+    GX::Emulator emu1;  // First instance should succeed
+    EXPECT_FALSE(emu1.IsRomLoaded());
+
+    // Second instance should throw
+    EXPECT_THROW({
+        GX::Emulator emu2;
+    }, std::runtime_error);
+
+    // First instance should still be valid
+    EXPECT_FALSE(emu1.IsRomLoaded());
 }
 
 // ---------------------------------------------------------------------------
