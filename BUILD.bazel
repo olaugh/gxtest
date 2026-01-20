@@ -132,3 +132,16 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+# Profiler test
+cc_test(
+    name = "gxtest_profiler",
+    srcs = [
+        "tests/profiler_test.cpp",
+        "tests/prime_sieve_rom.h",
+    ],
+    deps = [
+        ":gxtest",
+        "@googletest//:gtest_main",
+    ],
+)
