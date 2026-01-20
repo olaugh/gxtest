@@ -4,7 +4,35 @@
  * This library wraps the Genesis Plus GX emulator core, providing a clean C++
  * interface for headless execution and memory instrumentation.
  *
- * Example usage:
+ * THREAD SAFETY WARNING:
+ * The Genesis Plus GX emulator uses global state throughout its implementation
+ * (config, bitmap, cart.rom, work_ram, zram, input state, VDP state, etc.).
+ * This means:
+ *
+ *   - Multiple GX::Emulator instances CANNOT run concurrently in threads
+ *   - Creating multiple Emulator objects shares the same underlying state
+ *   - For parallel test execution, use process-based parallelism (fork())
+ *     instead of thread-based parallelism (std::thread, std::async)
+ *
+ * Example of SAFE parallel execution (fork-based):
+ *
+ *   pid_t pid = fork();
+ *   if (pid == 0) {
+ *       // Child process - has its own copy of global state
+ *       GX::Emulator emu;
+ *       emu.LoadRom("game.bin");
+ *       emu.RunFrames(1000);
+ *       // Write results to pipe, exit
+ *   }
+ *   // Parent collects results from children
+ *
+ * Example of UNSAFE parallel execution (will crash or corrupt state):
+ *
+ *   // DON'T DO THIS - threads share global state
+ *   std::thread t1([](){ GX::Emulator e1; e1.LoadRom("a.bin"); e1.RunFrames(100); });
+ *   std::thread t2([](){ GX::Emulator e2; e2.LoadRom("b.bin"); e2.RunFrames(100); });
+ *
+ * Basic usage example:
  *
  *   #include <gxtest.h>
  *
@@ -59,13 +87,17 @@ struct Input {
 
 /**
  * Emulator wrapper class providing the test harness interface
+ *
+ * WARNING: NOT THREAD-SAFE. Genesis Plus GX uses global state, so only one
+ * Emulator can be active per process. For parallel execution, use fork()
+ * to run each emulator in a separate process. See file header for details.
  */
 class Emulator {
 public:
     Emulator();
     ~Emulator();
 
-    // Prevent copying (singleton emulator state)
+    // Prevent copying (singleton emulator state - there's only one underlying emulator)
     Emulator(const Emulator&) = delete;
     Emulator& operator=(const Emulator&) = delete;
 

@@ -34,6 +34,7 @@ cc_library(
         "vendor/genplusgx/cd_hw/*.h",
     ]) + ["src/osd.h"],
     copts = [
+        "-O3",  # Always optimize emulator for fast test execution
         "-Wno-unused-parameter",
         "-Wno-sign-compare",
         "-Wno-implicit-function-declaration",
