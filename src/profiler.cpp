@@ -242,13 +242,16 @@ void Profiler::OnExecute(uint32_t pc) {
     if (delta <= 0) return;  // First call or cycle counter wrapped
 
     total_cycles_ += delta;
-    pending_cycles_ += delta;
 
     // Sampling: only do expensive work every Nth instruction
     if (sample_rate_ > 1) {
+        pending_cycles_ += delta;
         sample_counter_++;
         if (sample_counter_ < sample_rate_) {
-            return;  // Don't update last_pc_ - preserve it for call detection
+            // Update last_pc_ even on skipped samples so CallStack mode
+            // can track call/return instructions correctly
+            last_pc_ = pc;
+            return;
         }
         sample_counter_ = 0;
         // Use accumulated cycles since last sample (more accurate than scaling)
@@ -263,6 +266,7 @@ void Profiler::OnExecute(uint32_t pc) {
         s.cycles_exclusive += delta;
 
         // Count function entry (PC moved into this function from outside)
+        // Note: With sampling, this undercounts entries that happen between samples
         if (last_pc_ != 0) {
             const FunctionDef* last_func = LookupFunction(last_pc_);
             if (last_func != func) {
@@ -272,6 +276,8 @@ void Profiler::OnExecute(uint32_t pc) {
     }
 
     // CallStack mode: track JSR/BSR/RTS for inclusive cycles
+    // Note: With sampling enabled, we only check every Nth instruction for
+    // call/return opcodes, so inclusive timing will be less accurate.
     if (mode_ == ProfileMode::CallStack && last_pc_ != 0) {
         uint16_t opcode = ReadWord(last_pc_);
 
