@@ -9,7 +9,7 @@
  *   GX::Profiler profiler;
  *   profiler.AddFunction(0x001000, 0x001100, "generate_moves");
  *   profiler.AddFunction(0x001100, 0x001200, "score_move");
- *   // Or load from ELF: profiler.LoadSymbols("game.elf");
+ *   // Or load from ELF: profiler.LoadSymbolsFromELF("game.elf");
  *
  *   profiler.Start();
  *   emu.RunFrames(1000);
@@ -219,6 +219,7 @@ private:
     uint64_t total_cycles_ = 0;
     uint32_t sample_rate_ = 1;
     uint32_t sample_counter_ = 0;
+    int64_t pending_cycles_ = 0;  // Accumulated cycles since last sample (for sampling mode)
 };
 
 /** Global profiler instance (needed for cpu_hook callback) */

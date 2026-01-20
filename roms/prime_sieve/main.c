@@ -30,6 +30,7 @@ typedef unsigned int uint32_t;
 /**
  * Initialize the sieve array to all zeros (0 = potentially prime)
  */
+__attribute__((noinline))
 static void clear_sieve(void)
 {
     for (int i = 0; i < SIEVE_SIZE; i++) {
@@ -40,6 +41,7 @@ static void clear_sieve(void)
 /**
  * Mark 0 and 1 as composite (not prime)
  */
+__attribute__((noinline))
 static void mark_trivial_composites(void)
 {
     SIEVE_ARRAY[0] = 1;  /* 0 is not prime */
@@ -50,6 +52,7 @@ static void mark_trivial_composites(void)
  * Run the Sieve of Eratosthenes algorithm
  * For each prime p, mark all multiples of p as composite
  */
+__attribute__((noinline))
 static void run_sieve(void)
 {
     /* Only need to check up to sqrt(SIEVE_SIZE) ≈ 24 */
@@ -69,6 +72,7 @@ static void run_sieve(void)
 /**
  * Collect the first NUM_PRIMES primes from the sieve into the results array
  */
+__attribute__((noinline))
 static void collect_primes(void)
 {
     int count = 0;

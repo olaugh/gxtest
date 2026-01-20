@@ -18,12 +18,20 @@ namespace {
 
 using namespace GX::TestRoms;
 
-// Prime sieve ROM function addresses (from disassembly)
-// These are approximate ranges for testing purposes
-constexpr uint32_t FUNC_START = 0x200;       // Entry point after header
-constexpr uint32_t FUNC_MAIN = 0x200;        // main function
-constexpr uint32_t FUNC_SIEVE = 0x240;       // sieve computation
-constexpr uint32_t FUNC_END = 0x2A4;         // End of code
+// Prime sieve ROM function addresses (from ELF: m68k-elf-nm -S prime_sieve.elf)
+// 00000200        T _start
+// 00000210 000014 t clear_sieve
+// 00000224 000012 t mark_trivial_composites
+// 00000236 000034 t run_sieve
+// 0000026a 000036 t collect_primes
+// 000002a0 000022 T main
+constexpr uint32_t FUNC_START = 0x200;
+constexpr uint32_t FUNC_CLEAR_SIEVE = 0x210;
+constexpr uint32_t FUNC_MARK_TRIVIAL = 0x224;
+constexpr uint32_t FUNC_RUN_SIEVE = 0x236;
+constexpr uint32_t FUNC_COLLECT_PRIMES = 0x26A;
+constexpr uint32_t FUNC_MAIN = 0x2A0;
+constexpr uint32_t FUNC_MAIN_END = 0x2C2;
 
 class ProfilerTest : public GX::Test {
 protected:
@@ -34,8 +42,12 @@ protected:
             << "Failed to load prime sieve ROM";
 
         // Add function symbols for the prime sieve ROM
-        profiler.AddFunction(FUNC_MAIN, FUNC_SIEVE, "main");
-        profiler.AddFunction(FUNC_SIEVE, FUNC_END, "sieve");
+        profiler.AddFunction(FUNC_START, FUNC_CLEAR_SIEVE, "_start");
+        profiler.AddFunction(FUNC_CLEAR_SIEVE, FUNC_MARK_TRIVIAL, "clear_sieve");
+        profiler.AddFunction(FUNC_MARK_TRIVIAL, FUNC_RUN_SIEVE, "mark_trivial_composites");
+        profiler.AddFunction(FUNC_RUN_SIEVE, FUNC_COLLECT_PRIMES, "run_sieve");
+        profiler.AddFunction(FUNC_COLLECT_PRIMES, FUNC_MAIN, "collect_primes");
+        profiler.AddFunction(FUNC_MAIN, FUNC_MAIN_END, "main");
     }
 
     void TearDown() override {
@@ -66,7 +78,7 @@ TEST_F(ProfilerTest, StartStop) {
  * Test that symbols are loaded correctly
  */
 TEST_F(ProfilerTest, SymbolsLoaded) {
-    EXPECT_EQ(profiler.GetSymbolCount(), 2u);
+    EXPECT_EQ(profiler.GetSymbolCount(), 6u);
 }
 
 /**
