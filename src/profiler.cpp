@@ -44,6 +44,11 @@ Profiler::~Profiler() {
 }
 
 void Profiler::AddFunction(uint32_t start_addr, uint32_t end_addr, const std::string& name) {
+    // Validate function range
+    if (end_addr <= start_addr) {
+        return;  // Invalid range, ignore
+    }
+
     FunctionDef func = {start_addr, end_addr, name};
 
     // Insert in sorted order by start_addr
@@ -60,7 +65,17 @@ void Profiler::AddFunction(uint32_t start_addr, uint32_t end_addr, const std::st
 int Profiler::LoadSymbolsFromELF(const std::string& elf_path) {
     // Use nm to extract symbols
     // Format: "address type name"
-    std::string cmd = "nm -S --defined-only " + elf_path + " 2>/dev/null";
+    // Shell-quote the path to prevent command injection
+    std::string quoted_path = "'";
+    for (char c : elf_path) {
+        if (c == '\'') {
+            quoted_path += "'\\''";  // End quote, escaped quote, start quote
+        } else {
+            quoted_path += c;
+        }
+    }
+    quoted_path += "'";
+    std::string cmd = "nm -S --defined-only " + quoted_path + " 2>/dev/null";
     FILE* pipe = popen(cmd.c_str(), "r");
     if (!pipe) {
         return -1;
@@ -73,17 +88,21 @@ int Profiler::LoadSymbolsFromELF(const std::string& elf_path) {
         char type;
         char name[256];
 
-        // Parse: "address size type name" (with size) or "address type name" (without)
+        // Parse nm -S output: "hex_address hex_size type name" (both in hex, with size) or "hex_address type name" (without size)
         if (sscanf(line, "%x %x %c %255s", &addr, &size, &type, name) == 4) {
             // Has size - use it
             if (type == 'T' || type == 't') {  // Text (code) symbols only
-                AddFunction(addr, addr + size, name);
+                // Guard against overflow
+                uint32_t end_addr = (size <= UINT32_MAX - addr) ? addr + size : UINT32_MAX;
+                AddFunction(addr, end_addr, name);
                 count++;
             }
         } else if (sscanf(line, "%x %c %255s", &addr, &type, name) == 3) {
             // No size - estimate from next symbol (done after loading all)
             if (type == 'T' || type == 't') {
-                AddFunction(addr, addr + 0x100, name);  // Default 256 bytes
+                // Guard against overflow (0x100 = 256 byte default)
+                uint32_t end_addr = (addr <= UINT32_MAX - 0x100) ? addr + 0x100 : UINT32_MAX;
+                AddFunction(addr, end_addr, name);
                 count++;
             }
         }
@@ -102,6 +121,16 @@ int Profiler::LoadSymbolsFromELF(const std::string& elf_path) {
 }
 
 int Profiler::LoadSymbolsFromFile(const std::string& path) {
+    // Load symbols from a simple text file format:
+    //   <hex_address> <decimal_size> <name>
+    // Example:
+    //   00000200 16 _start
+    //   00000210 94 main
+    //
+    // Parsing note:
+    //   - This function parses the address as hex (%x) and the size as decimal (%u).
+    //   - This intentionally differs from LoadSymbolsFromELF (nm output), which uses
+    //     hex for both address and size (%x for each).
     std::ifstream file(path);
     if (!file) {
         return -1;
@@ -114,7 +143,9 @@ int Profiler::LoadSymbolsFromFile(const std::string& path) {
         char name[256];
 
         if (sscanf(line.c_str(), "%x %u %255s", &addr, &size, name) == 3) {
-            AddFunction(addr, addr + size, name);
+            // Guard against overflow
+            uint32_t end_addr = (size <= UINT32_MAX - addr) ? addr + size : UINT32_MAX;
+            AddFunction(addr, end_addr, name);
             count++;
         }
     }
@@ -128,9 +159,19 @@ void Profiler::ClearSymbols() {
 }
 
 void Profiler::Start(ProfileMode mode) {
+    ProfileOptions opts;
+    opts.mode = mode;
+    opts.sample_rate = 1;
+    Start(opts);
+}
+
+void Profiler::Start(const ProfileOptions& options) {
     if (running_) return;
 
-    mode_ = mode;
+    mode_ = options.mode;
+    sample_rate_ = options.sample_rate > 0 ? options.sample_rate : 1;
+    sample_counter_ = 0;
+    pending_cycles_ = 0;
     g_active_profiler = this;
     set_cpu_hook(ProfilerHook);
     running_ = true;
@@ -153,6 +194,7 @@ void Profiler::Reset() {
     }
     call_stack_.clear();
     total_cycles_ = 0;
+    pending_cycles_ = 0;
     last_pc_ = 0;
     if (running_) {
         last_cycles_ = m68k.cycles;
@@ -184,7 +226,7 @@ const FunctionDef* Profiler::LookupFunction(uint32_t addr) const {
 
 uint16_t Profiler::ReadWord(uint32_t addr) const {
     // Read from ROM (cart.rom is byteswapped on little-endian)
-    if (addr < 0x400000 && addr < cart.romsize) {
+    if (addr < 0x400000 && addr + 1 < cart.romsize) {
 #ifdef LSB_FIRST
         return (cart.rom[addr ^ 1] << 8) | cart.rom[(addr + 1) ^ 1];
 #else
@@ -204,6 +246,22 @@ void Profiler::OnExecute(uint32_t pc) {
 
     total_cycles_ += delta;
 
+    // Sampling: only do expensive work every Nth instruction
+    if (sample_rate_ > 1) {
+        pending_cycles_ += delta;
+        sample_counter_++;
+        if (sample_counter_ < sample_rate_) {
+            // Update last_pc_ even on skipped samples so CallStack mode
+            // can track call/return instructions correctly
+            last_pc_ = pc;
+            return;
+        }
+        sample_counter_ = 0;
+        // Use accumulated cycles since last sample (more accurate than scaling)
+        delta = pending_cycles_;
+        pending_cycles_ = 0;
+    }
+
     // Attribute cycles to current function
     const FunctionDef* func = LookupFunction(pc);
     if (func) {
@@ -211,6 +269,7 @@ void Profiler::OnExecute(uint32_t pc) {
         s.cycles_exclusive += delta;
 
         // Count function entry (PC moved into this function from outside)
+        // Note: With sampling, this undercounts entries that happen between samples
         if (last_pc_ != 0) {
             const FunctionDef* last_func = LookupFunction(last_pc_);
             if (last_func != func) {
@@ -220,12 +279,17 @@ void Profiler::OnExecute(uint32_t pc) {
     }
 
     // CallStack mode: track JSR/BSR/RTS for inclusive cycles
+    // Note: With sampling enabled, we only check every Nth instruction for
+    // call/return opcodes, so inclusive timing will be less accurate.
     if (mode_ == ProfileMode::CallStack && last_pc_ != 0) {
         uint16_t opcode = ReadWord(last_pc_);
 
         if (IsCallOpcode(opcode)) {
             // Entering a new function - push frame
-            if (func) {
+            // Limit stack depth to prevent unbounded growth from unbalanced calls
+            // (e.g., indirect jumps, exceptions, or non-standard control flow)
+            constexpr size_t MAX_CALL_STACK_DEPTH = 256;
+            if (func && call_stack_.size() < MAX_CALL_STACK_DEPTH) {
                 call_stack_.push_back({func->start_addr, current_cycles});
             }
         } else if (IsReturnOpcode(opcode) && !call_stack_.empty()) {
@@ -279,6 +343,9 @@ void Profiler::PrintReport(std::ostream& out, size_t max_functions) const {
     // Print header
     bool show_inclusive = (mode_ == ProfileMode::CallStack);
     out << "\n";
+    if (sample_rate_ > 1) {
+        out << "Sample rate: 1/" << sample_rate_ << " (estimated cycles)\n";
+    }
     out << std::setw(30) << std::left << "Function"
         << std::setw(12) << std::right << "Cycles";
     if (show_inclusive) {

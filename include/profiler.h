@@ -9,7 +9,7 @@
  *   GX::Profiler profiler;
  *   profiler.AddFunction(0x001000, 0x001100, "generate_moves");
  *   profiler.AddFunction(0x001100, 0x001200, "score_move");
- *   // Or load from ELF: profiler.LoadSymbols("game.elf");
+ *   // Or load from ELF: profiler.LoadSymbolsFromELF("game.elf");
  *
  *   profiler.Start();
  *   emu.RunFrames(1000);
@@ -35,6 +35,14 @@ namespace GX {
 enum class ProfileMode {
     Simple,     // Fast - just tracks which function PC is in
     CallStack   // Tracks call stack for inclusive cycle counts
+};
+
+/**
+ * Profiling options
+ */
+struct ProfileOptions {
+    ProfileMode mode = ProfileMode::Simple;
+    uint32_t sample_rate = 1;  // 1 = every instruction, N = every Nth instruction
 };
 
 /**
@@ -127,6 +135,12 @@ public:
     void Start(ProfileMode mode = ProfileMode::Simple);
 
     /**
+     * Start profiling with options
+     * @param options ProfileOptions struct with mode and sample_rate
+     */
+    void Start(const ProfileOptions& options);
+
+    /**
      * Stop profiling - removes the cpu_hook callback
      */
     void Stop();
@@ -161,6 +175,11 @@ public:
      * Get total cycles recorded
      */
     uint64_t GetTotalCycles() const { return total_cycles_; }
+
+    /**
+     * Get current sample rate (1 = every instruction)
+     */
+    uint32_t GetSampleRate() const { return sample_rate_; }
 
     /**
      * Print a formatted profile report
@@ -198,6 +217,9 @@ private:
     uint32_t last_pc_ = 0;
     int64_t last_cycles_ = 0;
     uint64_t total_cycles_ = 0;
+    uint32_t sample_rate_ = 1;
+    uint32_t sample_counter_ = 0;
+    int64_t pending_cycles_ = 0;  // Accumulated cycles since last sample (for sampling mode)
 };
 
 /** Global profiler instance (needed for cpu_hook callback) */
