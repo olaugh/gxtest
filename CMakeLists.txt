@@ -242,6 +242,143 @@ target_include_directories(gxtest_prime_sieve PRIVATE
 gtest_discover_tests(gxtest_prime_sieve)
 
 # -----------------------------------------------------------------------------
+# Symbol Example Test (demonstrates symbol-based testing)
+# -----------------------------------------------------------------------------
+
+# Option to build ROMs from source (requires m68k-elf toolchain)
+option(GXTEST_BUILD_ROMS "Build test ROMs from source (requires m68k-elf-gcc)" OFF)
+
+# Find Python for symbol extraction
+find_package(Python3 COMPONENTS Interpreter)
+
+if(GXTEST_BUILD_ROMS)
+    # Find m68k cross-compiler
+    find_program(M68K_GCC m68k-elf-gcc)
+    find_program(M68K_AS m68k-elf-as)
+    find_program(M68K_LD m68k-elf-ld)
+    find_program(M68K_NM m68k-elf-nm)
+    find_program(M68K_OBJCOPY m68k-elf-objcopy)
+
+    if(NOT Python3_FOUND)
+        message(WARNING "Python3 not found, ROM builds disabled (needed for symbol extraction)")
+    elseif(M68K_GCC AND M68K_AS AND M68K_LD AND M68K_NM AND M68K_OBJCOPY)
+        message(STATUS "m68k-elf toolchain and Python3 found, enabling ROM builds")
+
+        set(SYMBOL_EXAMPLE_DIR ${CMAKE_SOURCE_DIR}/roms/symbol_example)
+        set(SYMBOL_EXAMPLE_ROM ${SYMBOL_EXAMPLE_DIR}/symbol_example.bin)
+        set(SYMBOL_EXAMPLE_ELF ${SYMBOL_EXAMPLE_DIR}/symbol_example.elf)
+        set(SYMBOL_EXAMPLE_SYMBOLS_TXT ${SYMBOL_EXAMPLE_DIR}/symbol_example_symbols.txt)
+        set(GENERATED_INCLUDE_DIR ${CMAKE_BINARY_DIR}/generated)
+
+        # Create generated include directory
+        file(MAKE_DIRECTORY ${GENERATED_INCLUDE_DIR})
+
+        # Build the ROM using the Makefile
+        add_custom_command(
+            OUTPUT ${SYMBOL_EXAMPLE_ROM} ${SYMBOL_EXAMPLE_ELF}
+            COMMAND make -C ${SYMBOL_EXAMPLE_DIR} ${SYMBOL_EXAMPLE_ROM}
+            DEPENDS
+                ${SYMBOL_EXAMPLE_DIR}/main.c
+                ${SYMBOL_EXAMPLE_DIR}/crt0.s
+                ${SYMBOL_EXAMPLE_DIR}/genesis.ld
+                ${SYMBOL_EXAMPLE_DIR}/Makefile
+            COMMENT "Building symbol_example ROM..."
+        )
+
+        # Extract symbols from ELF
+        add_custom_command(
+            OUTPUT ${SYMBOL_EXAMPLE_SYMBOLS_TXT}
+            COMMAND ${M68K_NM} -n ${SYMBOL_EXAMPLE_ELF} > ${SYMBOL_EXAMPLE_SYMBOLS_TXT}
+            DEPENDS ${SYMBOL_EXAMPLE_ELF}
+            COMMENT "Extracting symbols from symbol_example.elf..."
+        )
+
+        # Generate C++ symbol header
+        add_custom_command(
+            OUTPUT ${GENERATED_INCLUDE_DIR}/symbol_example_symbols.h
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/elf2sym.py
+                    ${SYMBOL_EXAMPLE_SYMBOLS_TXT} > ${GENERATED_INCLUDE_DIR}/symbol_example_symbols.h
+            DEPENDS
+                ${SYMBOL_EXAMPLE_SYMBOLS_TXT}
+                ${CMAKE_SOURCE_DIR}/tools/elf2sym.py
+            COMMENT "Generating symbol_example_symbols.h..."
+        )
+
+        # Generate C++ ROM header with embedded binary
+        add_custom_command(
+            OUTPUT ${GENERATED_INCLUDE_DIR}/symbol_example_rom.h
+            COMMAND make -C ${SYMBOL_EXAMPLE_DIR} symbol_example_rom.h
+            COMMAND ${CMAKE_COMMAND} -E copy
+                    ${SYMBOL_EXAMPLE_DIR}/symbol_example_rom.h
+                    ${GENERATED_INCLUDE_DIR}/symbol_example_rom.h
+            DEPENDS ${SYMBOL_EXAMPLE_ROM}
+            COMMENT "Generating symbol_example_rom.h..."
+        )
+
+        # Custom target for ROM generation
+        add_custom_target(symbol_example_rom_gen
+            DEPENDS
+                ${GENERATED_INCLUDE_DIR}/symbol_example_symbols.h
+                ${GENERATED_INCLUDE_DIR}/symbol_example_rom.h
+        )
+
+        # Symbol-based test executable
+        add_executable(gxtest_symbol_example
+            tests/symbol_example_test.cpp
+        )
+
+        add_dependencies(gxtest_symbol_example symbol_example_rom_gen)
+
+        target_link_libraries(gxtest_symbol_example
+            gxtest
+            genplusgx_core
+            GTest::gtest_main
+        )
+
+        target_include_directories(gxtest_symbol_example PRIVATE
+            ${CMAKE_SOURCE_DIR}/include
+            ${GENERATED_INCLUDE_DIR}
+            ${CMAKE_SOURCE_DIR}/vendor/genplusgx
+        )
+
+        gtest_discover_tests(gxtest_symbol_example)
+
+        message(STATUS "Symbol example test enabled")
+    else()
+        message(WARNING "m68k-elf toolchain not found, ROM builds disabled")
+    endif()
+else()
+    # When GXTEST_BUILD_ROMS is OFF, check for pre-built headers
+    set(PREBUILT_SYMBOLS ${CMAKE_SOURCE_DIR}/tests/symbol_example_symbols.h)
+    set(PREBUILT_ROM ${CMAKE_SOURCE_DIR}/tests/symbol_example_rom.h)
+
+    if(EXISTS ${PREBUILT_SYMBOLS} AND EXISTS ${PREBUILT_ROM})
+        message(STATUS "Using pre-built symbol_example headers")
+
+        add_executable(gxtest_symbol_example
+            tests/symbol_example_test.cpp
+        )
+
+        target_link_libraries(gxtest_symbol_example
+            gxtest
+            genplusgx_core
+            GTest::gtest_main
+        )
+
+        target_include_directories(gxtest_symbol_example PRIVATE
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/tests
+            ${CMAKE_SOURCE_DIR}/vendor/genplusgx
+        )
+
+        gtest_discover_tests(gxtest_symbol_example)
+    else()
+        message(STATUS "Symbol example test disabled (no pre-built headers and GXTEST_BUILD_ROMS=OFF)")
+        message(STATUS "To enable: cmake -DGXTEST_BUILD_ROMS=ON or run 'make install' in roms/symbol_example/")
+    endif()
+endif()
+
+# -----------------------------------------------------------------------------
 # Installation
 # -----------------------------------------------------------------------------
 
