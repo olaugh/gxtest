@@ -128,9 +128,18 @@ void Profiler::ClearSymbols() {
 }
 
 void Profiler::Start(ProfileMode mode) {
+    ProfileOptions opts;
+    opts.mode = mode;
+    opts.sample_rate = 1;
+    Start(opts);
+}
+
+void Profiler::Start(const ProfileOptions& options) {
     if (running_) return;
 
-    mode_ = mode;
+    mode_ = options.mode;
+    sample_rate_ = options.sample_rate > 0 ? options.sample_rate : 1;
+    sample_counter_ = 0;
     g_active_profiler = this;
     set_cpu_hook(ProfilerHook);
     running_ = true;
@@ -203,6 +212,18 @@ void Profiler::OnExecute(uint32_t pc) {
     if (delta <= 0) return;  // First call or cycle counter wrapped
 
     total_cycles_ += delta;
+
+    // Sampling: only do expensive work every Nth instruction
+    if (sample_rate_ > 1) {
+        sample_counter_++;
+        if (sample_counter_ < sample_rate_) {
+            last_pc_ = pc;
+            return;
+        }
+        sample_counter_ = 0;
+        // Scale up the delta to account for skipped samples
+        delta *= sample_rate_;
+    }
 
     // Attribute cycles to current function
     const FunctionDef* func = LookupFunction(pc);

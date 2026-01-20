@@ -38,6 +38,14 @@ enum class ProfileMode {
 };
 
 /**
+ * Profiling options
+ */
+struct ProfileOptions {
+    ProfileMode mode = ProfileMode::Simple;
+    uint32_t sample_rate = 1;  // 1 = every instruction, N = every Nth instruction
+};
+
+/**
  * Statistics for a single function
  */
 struct FunctionStats {
@@ -127,6 +135,12 @@ public:
     void Start(ProfileMode mode = ProfileMode::Simple);
 
     /**
+     * Start profiling with options
+     * @param options ProfileOptions struct with mode and sample_rate
+     */
+    void Start(const ProfileOptions& options);
+
+    /**
      * Stop profiling - removes the cpu_hook callback
      */
     void Stop();
@@ -198,6 +212,8 @@ private:
     uint32_t last_pc_ = 0;
     int64_t last_cycles_ = 0;
     uint64_t total_cycles_ = 0;
+    uint32_t sample_rate_ = 1;
+    uint32_t sample_counter_ = 0;
 };
 
 /** Global profiler instance (needed for cpu_hook callback) */
