@@ -88,7 +88,7 @@ int Profiler::LoadSymbolsFromELF(const std::string& elf_path) {
         char type;
         char name[256];
 
-        // Parse nm -S output: "hex_address hex_size type name" (with size) or "hex_address type name" (without)
+        // Parse nm -S output: "hex_address hex_size type name" (both in hex, with size) or "hex_address type name" (without size)
         if (sscanf(line, "%x %x %c %255s", &addr, &size, &type, name) == 4) {
             // Has size - use it
             if (type == 'T' || type == 't') {  // Text (code) symbols only
