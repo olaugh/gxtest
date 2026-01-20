@@ -1,3 +1,14 @@
+gxtest - Headless Genesis Plus GX Test Harness
+===============================================
+
+Copyright (c) 2026 John O'Laughlin
+
+The gxtest framework code (all files except those in vendor/) is provided
+under the same non-commercial license terms as Genesis Plus GX below.
+
+========================================================================================
+Genesis Plus GX License
+========================================================================================
 
 Unless otherwise explicitly stated, all code in Genesis Plus GX is released
 under the following license:
