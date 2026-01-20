@@ -17,12 +17,15 @@
  * Example of SAFE parallel execution (fork-based):
  *
  *   pid_t pid = fork();
- *   if (pid == 0) {
+ *   if (pid < 0) {
+ *       perror("fork");  // Handle fork() error
+ *   } else if (pid == 0) {
  *       // Child process - has its own copy of global state
  *       GX::Emulator emu;
  *       emu.LoadRom("game.bin");
  *       emu.RunFrames(1000);
- *       // Write results to pipe, exit
+ *       // Write results to pipe, then exit child
+ *       _exit(0);
  *   }
  *   // Parent collects results from children
  *
