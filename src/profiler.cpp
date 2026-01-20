@@ -126,8 +126,11 @@ int Profiler::LoadSymbolsFromFile(const std::string& path) {
     // Example:
     //   00000200 16 _start
     //   00000210 94 main
-    // Note: This differs from nm output (used by LoadSymbolsFromELF) which uses
-    // hex for both address and size.
+    //
+    // Parsing note:
+    //   - This function parses the address as hex (%x) and the size as decimal (%u).
+    //   - This intentionally differs from LoadSymbolsFromELF (nm output), which uses
+    //     hex for both address and size (%x for each).
     std::ifstream file(path);
     if (!file) {
         return -1;
