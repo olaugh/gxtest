@@ -12,7 +12,10 @@
 #include <gxtest.h>
 #include <profiler.h>
 #include "prime_sieve_rom.h"
+#include <chrono>
 #include <cmath>
+#include <iostream>
+#include <vector>
 
 namespace {
 
