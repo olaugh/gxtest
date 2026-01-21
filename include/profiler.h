@@ -43,6 +43,7 @@ enum class ProfileMode {
 struct ProfileOptions {
     ProfileMode mode = ProfileMode::Simple;
     uint32_t sample_rate = 1;  // 1 = every instruction, N = every Nth instruction
+    bool collect_address_histogram = false;  // Collect per-address cycle counts
 };
 
 /**
@@ -189,6 +190,25 @@ public:
     void PrintReport(std::ostream& out, size_t max_functions = 0) const;
 
     // -------------------------------------------------------------------------
+    // Address Histogram (for line-by-line profiling)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Get per-address cycle histogram
+     * @return Map of PC address to cycles spent at that address
+     */
+    const std::unordered_map<uint32_t, uint64_t>& GetAddressHistogram() const {
+        return address_cycles_;
+    }
+
+    /**
+     * Write address histogram to JSON file for use with disassembly viewer
+     * @param path Output file path
+     * @return true on success
+     */
+    bool WriteAddressHistogram(const std::string& path) const;
+
+    // -------------------------------------------------------------------------
     // Internal (called by cpu_hook)
     // -------------------------------------------------------------------------
 
@@ -210,10 +230,12 @@ private:
 
     std::vector<FunctionDef> functions_;  // Sorted by start_addr
     std::unordered_map<uint32_t, FunctionStats> stats_;
+    std::unordered_map<uint32_t, uint64_t> address_cycles_;  // Per-address histogram
     std::vector<CallFrame> call_stack_;   // For CallStack mode
 
     ProfileMode mode_ = ProfileMode::Simple;
     bool running_ = false;
+    bool collect_address_histogram_ = false;
     uint32_t last_pc_ = 0;
     int64_t last_cycles_ = 0;
     uint64_t total_cycles_ = 0;
