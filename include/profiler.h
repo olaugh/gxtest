@@ -43,7 +43,14 @@ enum class ProfileMode {
 struct ProfileOptions {
     ProfileMode mode = ProfileMode::Simple;
     uint32_t sample_rate = 1;  // 1 = every instruction, N = every Nth instruction
-    bool collect_address_histogram = false;  // Collect per-address cycle counts
+
+    // Collect per-address cycle counts for line-level profiling.
+    // NOTE: When sample_rate > 1, only every Nth instruction's address is
+    // recorded, with all accumulated cycles attributed to that address. This
+    // reduces granularity significantly. For accurate line-level profiling,
+    // use sample_rate = 1. Sampling is still useful for reducing overhead when
+    // only function-level stats are needed.
+    bool collect_address_histogram = false;
 };
 
 /**
