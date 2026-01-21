@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -466,7 +467,7 @@ TEST_F(ProfilerTest, WriteAddressHistogramJSON) {
     profiler.Stop();
 
     // Write to temp file
-    std::string temp_path = "/tmp/gxtest_histogram_test.json";
+    std::string temp_path = (std::filesystem::temp_directory_path() / "gxtest_histogram_test.json").string();
     ASSERT_TRUE(profiler.WriteAddressHistogram(temp_path))
         << "WriteAddressHistogram should succeed";
 
@@ -518,7 +519,7 @@ TEST_F(ProfilerTest, WriteAddressHistogramRecordsSampleRate) {
     emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
     profiler.Stop();
 
-    std::string temp_path = "/tmp/gxtest_histogram_sample_test.json";
+    std::string temp_path = (std::filesystem::temp_directory_path() / "gxtest_histogram_sample_test.json").string();
     ASSERT_TRUE(profiler.WriteAddressHistogram(temp_path));
 
     std::ifstream file(temp_path);
