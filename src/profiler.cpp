@@ -392,7 +392,9 @@ bool Profiler::WriteAddressHistogram(const std::string& path) const {
         return false;
     }
 
-    // Write JSON format for use with disassembly viewer
+    // Write JSON format for use with disassembly viewer.
+    // Note: Stream error state persists across writes, so out.good() at the
+    // end correctly detects any intermediate write failures.
     out << "{\n";
     out << "  \"sample_rate\": " << sample_rate_ << ",\n";
     out << "  \"total_cycles\": " << total_cycles_ << ",\n";
