@@ -170,6 +170,7 @@ void Profiler::Start(const ProfileOptions& options) {
 
     mode_ = options.mode;
     sample_rate_ = options.sample_rate > 0 ? options.sample_rate : 1;
+    collect_address_histogram_ = options.collect_address_histogram;
     sample_counter_ = 0;
     pending_cycles_ = 0;
     g_active_profiler = this;
@@ -192,6 +193,7 @@ void Profiler::Reset() {
     for (auto& kv : stats_) {
         kv.second = FunctionStats();
     }
+    address_cycles_.clear();
     call_stack_.clear();
     total_cycles_ = 0;
     pending_cycles_ = 0;
@@ -260,6 +262,11 @@ void Profiler::OnExecute(uint32_t pc) {
         // Use accumulated cycles since last sample (more accurate than scaling)
         delta = pending_cycles_;
         pending_cycles_ = 0;
+    }
+
+    // Collect per-address histogram if enabled
+    if (collect_address_histogram_) {
+        address_cycles_[pc] += delta;
     }
 
     // Attribute cycles to current function
@@ -377,6 +384,40 @@ void Profiler::PrintReport(std::ostream& out, size_t max_functions) const {
     out << std::setw(30) << std::left << "Total"
         << std::setw(12) << std::right << total_cycles_
         << "\n";
+}
+
+bool Profiler::WriteAddressHistogram(const std::string& path) const {
+    std::ofstream out(path);
+    if (!out) {
+        return false;
+    }
+
+    // Write JSON format for use with disassembly viewer.
+    // Note: Stream error state persists across writes, so out.good() at the
+    // end correctly detects any intermediate write failures.
+    out << "{\n";
+    out << "  \"sample_rate\": " << sample_rate_ << ",\n";
+    out << "  \"total_cycles\": " << total_cycles_ << ",\n";
+    out << "  \"address_count\": " << address_cycles_.size() << ",\n";
+    out << "  \"addresses\": {\n";
+
+    // Sort addresses for deterministic output
+    std::vector<std::pair<uint32_t, uint64_t>> sorted_addrs(
+        address_cycles_.begin(), address_cycles_.end());
+    std::sort(sorted_addrs.begin(), sorted_addrs.end());
+
+    bool first = true;
+    for (const auto& kv : sorted_addrs) {
+        if (!first) out << ",\n";
+        first = false;
+        out << "    \"" << std::hex << std::setfill('0') << std::setw(8)
+            << kv.first << "\": " << std::dec << kv.second;
+    }
+
+    out << "\n  }\n";
+    out << "}\n";
+
+    return out.good();
 }
 
 bool Profiler::IsCallOpcode(uint16_t opcode) const {
