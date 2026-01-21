@@ -14,6 +14,8 @@
 #include "prime_sieve_rom.h"
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -330,6 +332,257 @@ TEST_F(ProfilerTest, DoubleStart) {
 
     profiler.Stop();
     EXPECT_FALSE(profiler.IsRunning());
+}
+
+// =============================================================================
+// Address Histogram Tests
+// =============================================================================
+
+/**
+ * Test that address histogram is empty when disabled (default)
+ */
+TEST_F(ProfilerTest, AddressHistogramDisabledByDefault) {
+    profiler.Start();
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    const auto& histogram = profiler.GetAddressHistogram();
+    EXPECT_TRUE(histogram.empty())
+        << "Address histogram should be empty when collect_address_histogram is false";
+}
+
+/**
+ * Test that address histogram is populated when enabled
+ */
+TEST_F(ProfilerTest, AddressHistogramCollected) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    const auto& histogram = profiler.GetAddressHistogram();
+    EXPECT_FALSE(histogram.empty())
+        << "Address histogram should have entries when enabled";
+
+    // Should have multiple unique addresses
+    EXPECT_GT(histogram.size(), 10u)
+        << "Expected many unique instruction addresses";
+
+    // All addresses should be in valid ROM range
+    for (const auto& kv : histogram) {
+        EXPECT_GE(kv.first, 0x200u) << "Address should be >= ROM start";
+        EXPECT_LT(kv.first, 0x400000u) << "Address should be < ROM end";
+        EXPECT_GT(kv.second, 0u) << "Cycle count should be positive";
+    }
+}
+
+/**
+ * Test that address histogram cycles sum to total cycles
+ */
+TEST_F(ProfilerTest, AddressHistogramSumsToTotal) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    const auto& histogram = profiler.GetAddressHistogram();
+    uint64_t histogram_total = 0;
+    for (const auto& kv : histogram) {
+        histogram_total += kv.second;
+    }
+
+    uint64_t total_cycles = profiler.GetTotalCycles();
+
+    // Histogram sum should equal total cycles
+    EXPECT_EQ(histogram_total, total_cycles)
+        << "Sum of address histogram should equal total cycles";
+}
+
+/**
+ * Test that address histogram works with sampling
+ */
+TEST_F(ProfilerTest, AddressHistogramWithSampling) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+    opts.sample_rate = 10;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    const auto& histogram = profiler.GetAddressHistogram();
+    EXPECT_FALSE(histogram.empty())
+        << "Address histogram should work with sampling";
+
+    // With sampling, we'll have fewer addresses but should still capture main ones
+    uint64_t histogram_total = 0;
+    for (const auto& kv : histogram) {
+        histogram_total += kv.second;
+    }
+
+    // Histogram sum should be very close to total cycles. With sampling,
+    // there may be a small difference due to pending_cycles_ not yet attributed
+    // at the time profiling stopped (at most sample_rate * cycles_per_instruction).
+    uint64_t total_cycles = profiler.GetTotalCycles();
+    uint64_t max_variance = opts.sample_rate * 200;  // ~200 cycles max per 68k instruction
+    EXPECT_LE(total_cycles - histogram_total, max_variance)
+        << "Histogram total should be within " << max_variance << " of total cycles";
+    EXPECT_GE(histogram_total, total_cycles * 99 / 100)
+        << "Histogram should capture at least 99% of cycles";
+}
+
+/**
+ * Test that Reset clears address histogram
+ */
+TEST_F(ProfilerTest, ResetClearsAddressHistogram) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    EXPECT_FALSE(profiler.GetAddressHistogram().empty());
+
+    profiler.Reset();
+
+    EXPECT_TRUE(profiler.GetAddressHistogram().empty())
+        << "Reset should clear address histogram";
+}
+
+/**
+ * Test WriteAddressHistogram produces valid JSON
+ */
+TEST_F(ProfilerTest, WriteAddressHistogramJSON) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    // Write to temp file
+    std::string temp_path = "/tmp/gxtest_histogram_test.json";
+    ASSERT_TRUE(profiler.WriteAddressHistogram(temp_path))
+        << "WriteAddressHistogram should succeed";
+
+    // Read and verify JSON structure
+    std::ifstream file(temp_path);
+    ASSERT_TRUE(file.good()) << "Should be able to read output file";
+
+    std::string content((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+    file.close();
+
+    // Basic JSON structure checks
+    EXPECT_NE(content.find("\"sample_rate\":"), std::string::npos)
+        << "JSON should contain sample_rate";
+    EXPECT_NE(content.find("\"total_cycles\":"), std::string::npos)
+        << "JSON should contain total_cycles";
+    EXPECT_NE(content.find("\"address_count\":"), std::string::npos)
+        << "JSON should contain address_count";
+    EXPECT_NE(content.find("\"addresses\":"), std::string::npos)
+        << "JSON should contain addresses object";
+
+    // Verify sample_rate value
+    EXPECT_NE(content.find("\"sample_rate\": 1"), std::string::npos)
+        << "Sample rate should be 1";
+
+    // Verify total_cycles matches
+    std::string total_str = "\"total_cycles\": " + std::to_string(profiler.GetTotalCycles());
+    EXPECT_NE(content.find(total_str), std::string::npos)
+        << "Total cycles in JSON should match profiler";
+
+    // Verify address_count matches histogram size
+    std::string count_str = "\"address_count\": " + std::to_string(profiler.GetAddressHistogram().size());
+    EXPECT_NE(content.find(count_str), std::string::npos)
+        << "Address count in JSON should match histogram size";
+
+    // Clean up
+    std::remove(temp_path.c_str());
+}
+
+/**
+ * Test WriteAddressHistogram with sampling records correct sample_rate
+ */
+TEST_F(ProfilerTest, WriteAddressHistogramRecordsSampleRate) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+    opts.sample_rate = 50;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    std::string temp_path = "/tmp/gxtest_histogram_sample_test.json";
+    ASSERT_TRUE(profiler.WriteAddressHistogram(temp_path));
+
+    std::ifstream file(temp_path);
+    std::string content((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+    file.close();
+
+    EXPECT_NE(content.find("\"sample_rate\": 50"), std::string::npos)
+        << "JSON should record correct sample rate";
+
+    std::remove(temp_path.c_str());
+}
+
+/**
+ * Test WriteAddressHistogram fails gracefully on invalid path
+ */
+TEST_F(ProfilerTest, WriteAddressHistogramInvalidPath) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+
+    profiler.Start(opts);
+    emu.RunFrames(1);
+    profiler.Stop();
+
+    // Try to write to an invalid path
+    EXPECT_FALSE(profiler.WriteAddressHistogram("/nonexistent/directory/file.json"))
+        << "WriteAddressHistogram should return false for invalid path";
+}
+
+/**
+ * Test address histogram contains expected addresses from known code
+ */
+TEST_F(ProfilerTest, AddressHistogramContainsKnownAddresses) {
+    GX::ProfileOptions opts;
+    opts.collect_address_histogram = true;
+
+    profiler.Start(opts);
+    emu.RunUntilMemoryEquals(DONE_FLAG_ADDR + 1, 0xAD, 60);
+    profiler.Stop();
+
+    const auto& histogram = profiler.GetAddressHistogram();
+
+    // The prime sieve starts at 0x200 (_start) and calls main at 0x2A0
+    // We should see addresses in the run_sieve function (0x236-0x26A)
+    // which contains the main loop
+    bool found_sieve_addr = false;
+    for (const auto& kv : histogram) {
+        if (kv.first >= FUNC_RUN_SIEVE && kv.first < FUNC_COLLECT_PRIMES) {
+            found_sieve_addr = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(found_sieve_addr)
+        << "Should have recorded cycles in run_sieve function";
+
+    // run_sieve should have significant cycles (it's the main loop)
+    uint64_t sieve_cycles = 0;
+    for (const auto& kv : histogram) {
+        if (kv.first >= FUNC_RUN_SIEVE && kv.first < FUNC_COLLECT_PRIMES) {
+            sieve_cycles += kv.second;
+        }
+    }
+    EXPECT_GT(sieve_cycles, profiler.GetTotalCycles() / 10)
+        << "run_sieve should account for significant portion of cycles";
 }
 
 } // namespace
