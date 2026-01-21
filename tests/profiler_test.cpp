@@ -430,7 +430,10 @@ TEST_F(ProfilerTest, AddressHistogramWithSampling) {
     // at the time profiling stopped (at most sample_rate * cycles_per_instruction).
     uint64_t total_cycles = profiler.GetTotalCycles();
     uint64_t max_variance = opts.sample_rate * 200;  // ~200 cycles max per 68k instruction
-    EXPECT_LE(total_cycles - histogram_total, max_variance)
+    uint64_t diff = (total_cycles > histogram_total)
+                        ? (total_cycles - histogram_total)
+                        : (histogram_total - total_cycles);
+    EXPECT_LE(diff, max_variance)
         << "Histogram total should be within " << max_variance << " of total cycles";
     EXPECT_GE(histogram_total, total_cycles * 99 / 100)
         << "Histogram should capture at least 99% of cycles";
